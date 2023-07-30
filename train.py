@@ -28,7 +28,9 @@ from model import Transformer, ModelArgs
 from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from tinystories import Task
+from about_me import Task
+
+from tokenizer import Tokenizer
 
 # -----------------------------------------------------------------------------
 # I/O
@@ -214,6 +216,37 @@ def estimate_loss():
     model.train()
     return out
 
+enc = Tokenizer()
+
+def generate_samples(num_samples):
+    start = ""
+    start_ids = enc.encode(start, bos=True, eos=False)
+    x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...]
+
+    temperature = 1.0
+    top_k = 300
+    max_new_tokens = 100
+
+    samples = []
+    # run generation
+    with torch.no_grad():
+        with ctx:
+            for k in range(num_samples):
+                y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+                sample = enc.decode(y[0].tolist())
+                samples.append(sample)
+                print(sample)
+                print('---------------')
+
+    if wandb_log:
+         try:
+             table = wandb.Table(columns=["Text"])
+             for sample in samples:
+                 table.add_data(sample)
+             wandb.log({"examples": table})
+         except Exception as e:
+             print(f"logging to wandb failed: {e}")
+
 # learning rate decay scheduler (cosine with warmup)
 def get_lr(it):
     # 1) linear warmup for warmup_iters steps
@@ -250,6 +283,7 @@ while True:
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        generate_samples(5)
         if wandb_log:
             try:
                 wandb.log(

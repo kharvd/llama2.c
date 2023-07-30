@@ -65,5 +65,12 @@ with torch.no_grad():
     with ctx:
         for k in range(num_samples):
             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            print(enc.decode(y[0].tolist()))
+            tokens = []
+            for t in y[0].tolist():
+                if t == enc.bos_id:
+                    tokens += enc.encode("\n<s>\n", bos=False, eos=False)
+                else:
+                    tokens.append(t)
+
+            print(enc.decode(tokens))
             print('---------------')
