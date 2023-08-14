@@ -207,7 +207,8 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
+        #self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
+        self.tok_embeddings = nn.Linear(params.vocab_size, params.dim, bias=False)
         self.dropout = nn.Dropout(params.dropout)
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
@@ -242,8 +243,9 @@ class Transformer(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, tokens: torch.Tensor, targets: Optional[torch.Tensor] = None) -> torch.Tensor:
-        _bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
+        _bsz, seqlen, _ = tokens.shape
+        # h = self.tok_embeddings(tokens)
+        h = tokens.matmul(self.tok_embeddings.weight)
         h = self.dropout(h)
         freqs_cos = self.freqs_cos[:seqlen]
         freqs_sin = self.freqs_sin[:seqlen]
@@ -317,7 +319,8 @@ class Transformer(nn.Module):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.params.max_seq_len else idx[:, -self.params.max_seq_len:]
             # forward the model to get the logits for the index in the sequence
-            logits = self(idx_cond)
+            idx_one_hot = torch.nn.functional.one_hot(idx_cond, num_classes=self.params.vocab_size).float()
+            logits = self(idx_one_hot)
             logits = logits[:, -1, :] # crop to just the final time step
             if temperature == 0.0:
                 # "sample" the single most likely index
