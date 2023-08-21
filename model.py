@@ -176,8 +176,9 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, layer_id: int, args: ModelArgs):
+    def __init__(self, layer_id: int, args: ModelArgs, hook):
         super().__init__()
+        self.hook = hook
         self.n_heads = args.n_heads
         self.dim = args.dim
         self.head_dim = args.dim // args.n_heads
@@ -194,15 +195,18 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x, freqs_cos, freqs_sin):
         h = x + self.attention.forward(self.attention_norm(x), freqs_cos, freqs_sin)
-        out = h + self.feed_forward.forward(self.ffn_norm(h))
+        ffn = self.feed_forward.forward(self.ffn_norm(h))
+        self.hook("ffn", self.layer_id, ffn)
+        out = h + ffn
         return out
 
 
 class Transformer(nn.Module):
     last_loss: Optional[torch.Tensor]
 
-    def __init__(self, params: ModelArgs):
+    def __init__(self, params: ModelArgs, hook):
         super().__init__()
+        self.hook = hook
         self.params = params
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
@@ -212,7 +216,7 @@ class Transformer(nn.Module):
         self.dropout = nn.Dropout(params.dropout)
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
-            self.layers.append(TransformerBlock(layer_id, params))
+            self.layers.append(TransformerBlock(layer_id, params, hook))
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
 
@@ -250,9 +254,15 @@ class Transformer(nn.Module):
         freqs_cos = self.freqs_cos[:seqlen]
         freqs_sin = self.freqs_sin[:seqlen]
 
+        layer_activations = []
+        layer_activations.append(h)
+
         for layer in self.layers:
             h = layer(h, freqs_cos, freqs_sin)
+            layer_activations.append(h)
         h = self.norm(h)
+        
+        layer_activations.append(h)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
