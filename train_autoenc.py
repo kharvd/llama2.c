@@ -132,18 +132,27 @@ if compile:
 
 @torch.no_grad()
 def estimate_loss():
-    out = {}
+    out = {
+        "loss": {},
+        "l0_norm": {},
+    }
     model.eval()
     for split in ["train", "val"]:
         batch_iter = iter_batches(split=split)
         losses = torch.zeros(eval_iters)  # keep on CPU
+        l0_norms = torch.zeros(eval_iters)  # keep on CPU
         for k in range(eval_iters):
             X = next(batch_iter)
             with ctx:
-                _ = model(X)
-                loss = model.last_loss
+                metrics = model.metrics(X)
+                loss = metrics["loss"]
+                l0_norm = metrics["l0_norm"]
+
             losses[k] = loss.item()
-        out[split] = losses.mean()
+            l0_norms[k] = l0_norm.item()
+
+        out["l0_norm"][split] = l0_norms.mean()
+        out["loss"][split] = losses.mean()
     model.train()
     return out
 
@@ -160,9 +169,11 @@ local_iter_num = 0  # number of iterations in the lifetime of this process
 while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0:
-        losses = estimate_loss()
+        metrics = estimate_loss()
+        losses = metrics["loss"]
+        l0_norms = metrics["l0_norm"]
         print(
-            f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
+            f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}, val l0 norm {l0_norms['val']:.4f}"
         )
         if wandb_log:
             try:
@@ -172,6 +183,7 @@ while True:
                         "samples": iter_num * samples_per_iter,
                         "loss/train": losses["train"],
                         "loss/val": losses["val"],
+                        "l0_norm/val": l0_norms["val"],
                         "lr": learning_rate,
                     },
                     step=iter_num,

@@ -78,3 +78,16 @@ class Autoencoder(nn.Module):
         self.last_loss += self.l1 * torch.mean(torch.norm(f, p=1, dim=1))
 
         return x_pred
+
+    def metrics(self, x: torch.Tensor):
+        f = self.encode(x)
+        x_pred = self.decode(f)
+        loss = F.mse_loss(x_pred, x, reduction="mean")
+        loss += self.l1 * torch.mean(torch.norm(f, p=1, dim=1))
+
+        l0_norm = torch.mean(torch.norm(f, p=0, dim=1))
+
+        return {
+            "loss": loss,
+            "l0_norm": l0_norm,
+        }
