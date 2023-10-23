@@ -1,8 +1,10 @@
 import glob
 import random
+import re
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.utils.parametrize
 import torch.utils.data
 import numpy as np
 
@@ -49,6 +51,15 @@ class Task:
             yield x
 
 
+class Normalized(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, X: torch.Tensor):
+        return X / torch.norm(X, dim=self.dim, keepdim=True)
+
+
 class Autoencoder(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, l1: float):
         super().__init__()
@@ -58,6 +69,9 @@ class Autoencoder(nn.Module):
         self.bias_dec = nn.Parameter(torch.zeros(input_dim))
         self.w_enc = nn.Linear(input_dim, hidden_dim)
         self.w_dec = nn.Linear(hidden_dim, input_dim, bias=False)
+        torch.nn.utils.parametrize.register_parametrization(
+            self.w_dec, "weight", Normalized(dim=0)
+        )
 
         self.last_loss = None
 
