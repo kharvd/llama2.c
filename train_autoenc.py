@@ -135,24 +135,29 @@ def estimate_loss():
     out = {
         "loss": {},
         "l0_norm": {},
+        "l1_norm": {},
+        "mse": {},
     }
     model.eval()
     for split in ["train", "val"]:
         batch_iter = iter_batches(split=split)
-        losses = torch.zeros(eval_iters)  # keep on CPU
-        l0_norms = torch.zeros(eval_iters)  # keep on CPU
+        accums = {
+            "loss": torch.zeros(eval_iters),
+            "l0_norm": torch.zeros(eval_iters),
+            "l1_norm": torch.zeros(eval_iters),
+            "mse": torch.zeros(eval_iters),
+        }
         for k in range(eval_iters):
             X = next(batch_iter)
             with ctx:
                 metrics = model.metrics(X)
-                loss = metrics["loss"]
-                l0_norm = metrics["l0_norm"]
 
-            losses[k] = loss.item()
-            l0_norms[k] = l0_norm.item()
+            for key in accums:
+                accums[key][k] = metrics[key].item()
 
-        out["l0_norm"][split] = l0_norms.mean()
-        out["loss"][split] = losses.mean()
+        for key in accums:
+            out[key][split] = accums[key].mean()
+
     model.train()
     return out
 
@@ -183,7 +188,11 @@ while True:
                         "samples": iter_num * samples_per_iter,
                         "loss/train": losses["train"],
                         "loss/val": losses["val"],
-                        "l0_norm/val": l0_norms["val"],
+                        "l0_norm/val": metrics["l0_norm"]["val"],
+                        "mse/val": metrics["mse"]["val"],
+                        "mse/train": metrics["mse"]["train"],
+                        "l1_norm/val": metrics["l1_norm"]["val"],
+                        "l1_norm/train": metrics["l1_norm"]["train"],
                         "lr": learning_rate,
                     },
                     step=iter_num,
