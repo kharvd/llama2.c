@@ -28,6 +28,7 @@ vocab_source = (
 )
 vocab_size = 32000  # the Llama 2 tokenizer has 32K tokens
 # model
+layer_idx = 4
 dim = 288
 n_layers = 6
 n_heads = 6
@@ -150,7 +151,7 @@ out_batch_idx = 0
 model.eval()
 with torch.no_grad():
     for X, _ in tqdm.tqdm(train_batch_iter):
-        acts = model.collect_activations(X, layer_idx=4)
+        acts = model.collect_activations(X, layer_idx=layer_idx)
         # assert acts.shape[0] == batch_size * max_seq_len
         out_batch[out_batch_i : out_batch_i + acts.shape[0]] = (
             acts.detach().cpu().numpy()
